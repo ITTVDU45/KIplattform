@@ -34,6 +34,10 @@
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.5.2"
   },
+  "overrides": {
+    "minimatch": ">=10.2.1",
+    "ajv": ">=8.18.0"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
