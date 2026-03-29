@@ -1,4 +1,4 @@
-export const APP_NAME = "Curser";
+export const APP_NAME = "KI Plattform";
 export const APP_DESCRIPTION = "KI-Services Dashboard";
 
 export const ITEMS_PER_PAGE = 10;

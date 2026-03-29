@@ -1,5 +1,5 @@
 import { authService, AuthServiceError } from "./auth.service";
-import { tokenStorage } from "./token.storage";
+import { clearClientAuthState } from "./token.storage";
 
 export class ApiClientError extends Error {
   constructor(
@@ -14,15 +14,8 @@ export class ApiClientError extends Error {
 
 let refreshPromise: Promise<void> | null = null;
 
-function mergeHeaders(
-  initialHeaders: HeadersInit | undefined,
-  accessToken?: string,
-): Headers {
+function mergeHeaders(initialHeaders: HeadersInit | undefined): Headers {
   const headers = new Headers(initialHeaders);
-
-  if (accessToken) {
-    headers.set("Authorization", `Bearer ${accessToken}`);
-  }
 
   if (!headers.has("Accept")) {
     headers.set("Accept", "application/json");
@@ -96,7 +89,7 @@ async function ensureFreshToken(): Promise<boolean> {
     await refreshPromise;
     return true;
   } catch {
-    tokenStorage.clearTokens();
+    clearClientAuthState();
     redirectToLogin();
     return false;
   }
@@ -106,11 +99,10 @@ async function runRequest<T>(
   input: string | URL | Request,
   init: RequestInit,
 ): Promise<T> {
-  const { accessToken } = tokenStorage.getTokens() ?? {};
-
   const response = await fetch(input, {
     ...init,
-    headers: mergeHeaders(init.headers, accessToken),
+    credentials: init.credentials ?? "include",
+    headers: mergeHeaders(init.headers),
   });
 
   const data = await parseApiResponse(response);
@@ -134,13 +126,6 @@ export async function apiFetch<T>(
     return await runRequest<T>(input, init);
   } catch (error: unknown) {
     if (!(error instanceof ApiClientError) || error.status !== 401) {
-      throw error;
-    }
-
-    const hasRefreshToken = Boolean(tokenStorage.getTokens()?.refreshToken);
-    if (!hasRefreshToken) {
-      tokenStorage.clearTokens();
-      redirectToLogin();
       throw error;
     }
 

@@ -5,10 +5,14 @@ export const AUTH_SERVICE_BASE_URL =
   "https://auth.ci-hosting.de";
 
 export const AUTH_SERVICE_LOGIN_PATH =
-  process.env.AUTH_SERVICE_LOGIN_PATH ?? "/login";
+  process.env.AUTH_SERVICE_LOGIN_PATH ?? "/user/login";
 
 export const AUTH_SERVICE_REGISTER_PATH =
   process.env.AUTH_SERVICE_REGISTER_PATH ?? "/user/register";
+
+export const AUTH_SERVICE_REGISTER_URL =
+  process.env.AUTH_SERVICE_REGISTER_URL ??
+  "https://api.ci-hosting.de/public/user/registration";
 
 export const AUTH_SERVICE_REFRESH_PATH =
   process.env.AUTH_SERVICE_REFRESH_PATH ?? "/refresh";

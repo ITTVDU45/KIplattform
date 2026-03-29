@@ -23,8 +23,8 @@ export default function RegisterSuccessPage() {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            Deine Registrierung ist eingegangen und wurde im Adminpanel als pending angelegt.
-            Nach Freischaltung kannst du dich einloggen.
+            Deine Registrierung wurde erfolgreich uebermittelt.
+            Nach der Freischaltung kannst du dich einloggen.
           </p>
 
           <div className="mt-6 space-y-3">

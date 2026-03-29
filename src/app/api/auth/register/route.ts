@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import {
-  AUTH_SERVICE_REGISTER_PATH,
-  authServiceUrl,
+  AUTH_SERVICE_REGISTER_URL,
   parseUpstreamBody,
 } from "@/lib/auth/auth.server";
+import type { RegisterSalutation } from "@/lib/auth/auth.types";
 
 interface RegisterBody {
+  salutation?: string;
   firstName?: string;
   lastName?: string;
-  phone?: string;
   email?: string;
   password?: string;
+}
+
+const VALID_SALUTATIONS: RegisterSalutation[] = ["Herr", "Frau", "Divers"];
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isValidSalutation(value: unknown): value is RegisterSalutation {
+  return typeof value === "string" && VALID_SALUTATIONS.includes(value as RegisterSalutation);
 }
 
 export async function POST(request: Request) {
@@ -26,39 +36,31 @@ export async function POST(request: Request) {
   }
 
   if (
-    !body.firstName ||
-    !body.lastName ||
-    !body.phone ||
-    !body.email ||
-    !body.password
+    !isValidSalutation(body.salutation) ||
+    !isNonEmptyString(body.firstName) ||
+    !isNonEmptyString(body.lastName) ||
+    !isNonEmptyString(body.email) ||
+    !isNonEmptyString(body.password)
   ) {
     return NextResponse.json(
       {
         message:
-          "Vorname, Nachname, Telefonnummer, E-Mail und Passwort sind erforderlich.",
+          "Anrede, Vorname, Nachname, E-Mail und Passwort sind erforderlich.",
       },
       { status: 400 },
     );
   }
 
-  const extendedPayload = {
-    firstName: body.firstName,
-    lastName: body.lastName,
-    phone: body.phone,
-    first_name: body.firstName,
-    last_name: body.lastName,
-    phoneNumber: body.phone,
-    phone_number: body.phone,
-    email: body.email,
-    password: body.password,
-  };
-  const minimalPayload = {
-    email: body.email,
+  const payload = {
+    anrede: body.salutation,
+    firstname: body.firstName.trim(),
+    lastname: body.lastName.trim(),
+    email: body.email.trim(),
     password: body.password,
   };
 
-  const postToUpstream = async (path: string, payload: unknown) => {
-    const upstreamResponse = await fetch(authServiceUrl(path), {
+  try {
+    const upstreamResponse = await fetch(AUTH_SERVICE_REGISTER_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -67,63 +69,13 @@ export async function POST(request: Request) {
       body: JSON.stringify(payload),
       cache: "no-store",
     });
+
     const data = await parseUpstreamBody(upstreamResponse);
-    return { status: upstreamResponse.status, data };
-  };
-
-  const attempts: Array<{ path: string; variant: "extended" | "minimal"; status: number }> = [];
-  const candidatePaths = Array.from(
-    new Set([
-      AUTH_SERVICE_REGISTER_PATH,
-      "/user/register",
-      "/register",
-      "/auth/register",
-      "/api/register",
-    ]),
-  );
-
-  try {
-    for (const path of candidatePaths) {
-      const extendedResult = await postToUpstream(path, extendedPayload);
-      attempts.push({ path, variant: "extended", status: extendedResult.status });
-
-      if (extendedResult.status === 404) {
-        continue;
-      }
-
-      if (extendedResult.status >= 400 && extendedResult.status < 500) {
-        const minimalResult = await postToUpstream(path, minimalPayload);
-        attempts.push({ path, variant: "minimal", status: minimalResult.status });
-        return NextResponse.json(minimalResult.data, { status: minimalResult.status });
-      }
-
-      return NextResponse.json(extendedResult.data, { status: extendedResult.status });
-    }
+    return NextResponse.json(data, { status: upstreamResponse.status });
   } catch {
     return NextResponse.json(
       { message: "Auth-Service aktuell nicht erreichbar." },
       { status: 503 },
     );
   }
-
-  const acceptWhenBackend404 =
-    process.env.AUTH_REGISTER_ACCEPT_WHEN_BACKEND_404 === "true";
-  if (acceptWhenBackend404) {
-    return NextResponse.json(
-      {
-        message:
-          "Registrierung eingegangen. Ihr Konto wird nach Freischaltung durch den Administrator aktiv.",
-      },
-      { status: 201 },
-    );
-  }
-
-  return NextResponse.json(
-    {
-      message:
-        "Der Auth-Service hat unter der konfigurierten Adresse keinen Registrierungs-Endpunkt (alle Versuche: 404). Bitte AUTH_SERVICE_BASE_URL und AUTH_SERVICE_REGISTER_PATH prüfen oder AUTH_REGISTER_ACCEPT_WHEN_BACKEND_404=true setzen, bis das Backend bereit ist.",
-      attempts,
-    },
-    { status: 503 },
-  );
 }

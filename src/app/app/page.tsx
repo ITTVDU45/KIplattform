@@ -1,16 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { authService } from "@/lib/auth/auth.service";
-import { tokenStorage } from "@/lib/auth/token.storage";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
+import { routing } from "@/i18n/routing";
 
 export default function CustomerAppPage() {
   const router = useRouter();
-  const tokens = tokenStorage.getTokens();
+  const { authenticated, isLoading, logout, roles, user } = useAuth();
 
-  const handleLogout = () => {
-    authService.logout();
+  const handleLogout = async () => {
+    await logout();
     router.replace("/login");
   };
 
@@ -23,18 +23,29 @@ export default function CustomerAppPage() {
         </p>
 
         <div className="mt-6 rounded-lg border border-border bg-muted/20 p-4 text-sm">
-          <p className="font-medium text-foreground">Token-Status</p>
+          <p className="font-medium text-foreground">Session-Status</p>
           <p className="mt-2 text-muted-foreground">
-            Access-Token vorhanden: {tokens?.accessToken ? "Ja" : "Nein"}
+            Authentifiziert: {isLoading ? "Pruefung..." : authenticated ? "Ja" : "Nein"}
           </p>
           <p className="text-muted-foreground">
-            Refresh-Token vorhanden: {tokens?.refreshToken ? "Ja" : "Nein"}
+            E-Mail: {user?.email ?? "Unbekannt"}
+          </p>
+          <p className="text-muted-foreground">
+            Rollen: {roles.length > 0 ? roles.join(", ") : "Keine"}
           </p>
         </div>
 
-        <Button className="mt-6" onClick={handleLogout} variant="outline">
-          Logout
-        </Button>
+        <div className="mt-6 flex gap-3">
+          <Button
+            onClick={() => router.replace(`/${routing.defaultLocale}/dashboard`)}
+            variant="default"
+          >
+            Zum Dashboard
+          </Button>
+          <Button onClick={handleLogout} variant="outline">
+            Logout
+          </Button>
+        </div>
       </div>
     </main>
   );

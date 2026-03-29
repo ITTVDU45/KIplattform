@@ -14,18 +14,29 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useAuth } from "@/components/auth/auth-provider";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { Locale } from "@/i18n/routing";
+import { APP_NAME } from "@/config/constants";
 
 export function Header() {
   const t = useTranslations();
   const locale = useLocale() as Locale;
   const router = useRouter();
   const pathname = usePathname();
+  const { authenticated, isLoading, logout, roles, user } = useAuth();
   const unreadCount = 2;
+  const displayName = user?.email?.split("@")[0] ?? "Nicht angemeldet";
+  const displayEmail = user?.email ?? "guest@example.com";
+  const roleLabel = roles.length > 0 ? roles.join(", ") : "Gast";
 
   function switchLocale(newLocale: Locale) {
     router.replace(pathname, { locale: newLocale });
+  }
+
+  async function handleLogout() {
+    await logout();
+    window.location.assign("/login");
   }
 
   return (
@@ -33,9 +44,9 @@ export function Header() {
       {/* Mobile Logo */}
       <Link href="/dashboard" className="flex md:hidden items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-          C
+          {APP_NAME.charAt(0)}
         </div>
-        <span className="text-lg font-bold text-foreground">Curser</span>
+        <span className="text-lg font-bold text-foreground">{APP_NAME}</span>
       </Link>
 
       <div className="flex flex-1 items-center gap-2 md:gap-4">
@@ -150,9 +161,12 @@ export function Header() {
           <DropdownMenuContent align="end" className="bg-popover/95 backdrop-blur-xl border-border">
             <DropdownMenuLabel className="text-foreground">
               <div className="flex flex-col">
-                <span>Max Mustermann</span>
+                <span>{isLoading ? "Lade..." : displayName}</span>
                 <span className="text-xs font-normal text-muted-foreground">
-                  max@example.com
+                  {displayEmail}
+                </span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {roleLabel}
                 </span>
               </div>
             </DropdownMenuLabel>
@@ -164,9 +178,14 @@ export function Header() {
               <Link href="/settings">{t("header.settings")}</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-border" />
-            <DropdownMenuItem className="text-accent-danger focus:bg-destructive/10 focus:text-destructive min-h-[44px]">
-              {t("header.logout")}
-            </DropdownMenuItem>
+            {authenticated ? (
+              <DropdownMenuItem
+                className="text-accent-danger focus:bg-destructive/10 focus:text-destructive min-h-[44px]"
+                onClick={handleLogout}
+              >
+                {t("header.logout")}
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

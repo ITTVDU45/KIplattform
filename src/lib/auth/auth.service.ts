@@ -1,15 +1,11 @@
 import type {
-  AuthResult,
-  JwtPayload,
+  AuthSession,
   LoginPayload,
+  LoginResult,
   RegisterPayload,
   RegisterResult,
-  Role,
-  TokenResponse,
-  Tokens,
-  User,
 } from "./auth.types";
-import { tokenStorage } from "./token.storage";
+import { clearClientAuthState } from "./token.storage";
 
 const AUTH_API_BASE_URL =
   process.env.NEXT_PUBLIC_AUTH_API_BASE_URL?.replace(/\/+$/, "") ?? "";
@@ -19,7 +15,8 @@ const REGISTER_PATH =
   process.env.NEXT_PUBLIC_AUTH_CLIENT_REGISTER_PATH ?? "/api/auth/register";
 const REFRESH_PATH =
   process.env.NEXT_PUBLIC_AUTH_CLIENT_REFRESH_PATH ?? "/api/auth/refresh";
-const DEFAULT_ACCESS_TTL_MS = 15 * 60 * 1000;
+const ME_PATH =
+  process.env.NEXT_PUBLIC_AUTH_CLIENT_ME_PATH ?? "/api/auth/me";
 
 export class AuthServiceError extends Error {
   constructor(
@@ -41,154 +38,30 @@ function buildUrl(path: string): string {
   if (!AUTH_API_BASE_URL) {
     return normalizedPath;
   }
+
   return `${AUTH_API_BASE_URL}${normalizedPath}`;
 }
 
-function decodeJwtPayload(token: string): JwtPayload | null {
-  const tokenParts = token.split(".");
-  if (tokenParts.length < 2) {
-    return null;
-  }
-
-  try {
-    if (typeof atob !== "function") {
-      return null;
-    }
-
-    const base64 = tokenParts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-    const json = atob(`${base64}${padding}`);
-    const payload = JSON.parse(json) as JwtPayload;
-    return payload && typeof payload === "object" ? payload : null;
-  } catch {
-    return null;
-  }
-}
-
-function asMilliseconds(value: number): number {
-  return value < 10_000_000_000 ? value * 1000 : value;
-}
-
-function numberFromUnknown(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  return null;
-}
-
-function parseResponseJson(data: unknown): TokenResponse {
+function toAuthSession(data: unknown): AuthSession {
   if (!data || typeof data !== "object") {
-    return {};
+    return { authenticated: false, user: null, roles: [] };
   }
 
-  return data as TokenResponse;
-}
-
-function pickTokenValue(data: TokenResponse, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = data[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-function resolveExpiresAt(data: TokenResponse, accessToken: string): number {
-  const explicitExpiresAt =
-    numberFromUnknown(data.expiresAt) ?? numberFromUnknown(data.expires_at);
-  if (explicitExpiresAt) {
-    return asMilliseconds(explicitExpiresAt);
-  }
-
-  const expiresIn =
-    numberFromUnknown(data.expiresIn) ?? numberFromUnknown(data.expires_in);
-  if (expiresIn) {
-    return Date.now() + expiresIn * 1000;
-  }
-
-  const jwtPayload = decodeJwtPayload(accessToken);
-  if (jwtPayload?.exp) {
-    return jwtPayload.exp * 1000;
-  }
-
-  return Date.now() + DEFAULT_ACCESS_TTL_MS;
-}
-
-function normalizeTokenResponse(data: TokenResponse): AuthResult {
-  const accessToken =
-    pickTokenValue(data, ["accessToken", "access_token", "sessionToken", "session_token", "token"]) ??
-    "";
-  const refreshToken =
-    pickTokenValue(data, ["refreshToken", "refresh_token"]) ?? "";
-
-  if (!accessToken || !refreshToken) {
-    throw new AuthServiceError("Token response is missing required fields.");
-  }
-
-  const tokens: Tokens = {
-    accessToken,
-    refreshToken,
-    expiresAt: resolveExpiresAt(data, accessToken),
-  };
-
-  const jwtPayload = decodeJwtPayload(accessToken);
-  const roles =
-    Array.isArray(jwtPayload?.roles) && jwtPayload.roles.length > 0
-      ? jwtPayload.roles
-      : typeof jwtPayload?.role === "string"
-        ? [jwtPayload.role]
-        : undefined;
-
-  const derivedUser: User | undefined = jwtPayload
-    ? {
-        id: typeof jwtPayload.sub === "string" ? jwtPayload.sub : undefined,
-        email: typeof jwtPayload.email === "string" ? jwtPayload.email : undefined,
-        role: roles?.[0] as Role | undefined,
-        roles,
-      }
-    : undefined;
+  const candidate = data as Record<string, unknown>;
+  const authenticated = candidate.authenticated === true;
+  const user =
+    candidate.user && typeof candidate.user === "object"
+      ? (candidate.user as AuthSession["user"])
+      : null;
+  const roles = Array.isArray(candidate.roles)
+    ? candidate.roles.filter((entry): entry is string => typeof entry === "string")
+    : [];
 
   return {
-    tokens,
-    user: data.user ?? derivedUser,
-    raw: data,
+    authenticated,
+    user,
+    roles,
   };
-}
-
-const PENDING_ACCOUNT_HINTS = [
-  "pending",
-  "freischalt",
-  "freigeben",
-  "not approved",
-  "not activated",
-  "awaiting approval",
-  "account not active",
-  "inaktiv",
-  "noch nicht",
-];
-
-function isPendingAccountMessage(data: unknown): boolean {
-  if (!data || typeof data !== "object") return false;
-  const candidate = data as Record<string, unknown>;
-  const text = [
-    candidate.message,
-    candidate.error,
-    candidate.detail,
-    candidate.description,
-    candidate.code,
-  ]
-    .filter((v): v is string => typeof v === "string")
-    .join(" ")
-    .toLowerCase();
-  return PENDING_ACCOUNT_HINTS.some((hint) => text.includes(hint));
 }
 
 function extractErrorMessage(status: number, data: unknown): string {
@@ -209,22 +82,23 @@ function extractErrorMessage(status: number, data: unknown): string {
   }
 
   if (status === 401) {
-    if (isPendingAccountMessage(data)) {
-      return "Dein Account ist noch nicht freigeschaltet. Bitte warte auf die Freischaltung durch den Administrator.";
-    }
     return "Der Account ist noch nicht freigeschaltet oder die Zugangsdaten sind nicht korrekt.";
   }
 
   if (status === 403) {
-    return "Dein Account ist noch nicht freigeschaltet.";
+    return "Login nicht erlaubt oder Geraet nicht autorisiert.";
   }
 
   if (status === 404) {
     return "Auth-Endpunkt nicht gefunden. Bitte Backend-Konfiguration pruefen.";
   }
 
+  if (status === 429) {
+    return "Zu viele Login-Versuche. Bitte spaeter erneut versuchen.";
+  }
+
   if (status === 503) {
-    return "Auth-Service vorübergehend nicht erreichbar. Bitte später erneut versuchen.";
+    return "Auth-Service voruebergehend nicht erreichbar. Bitte spaeter erneut versuchen.";
   }
 
   return "Anfrage an den Auth-Service fehlgeschlagen.";
@@ -248,14 +122,38 @@ async function parseBody(response: Response): Promise<unknown> {
   }
 }
 
-async function postJson(path: string, body: unknown): Promise<unknown> {
+async function postJson(path: string, body?: unknown): Promise<unknown> {
   const response = await fetch(buildUrl(path), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify(body),
+    credentials: "same-origin",
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  const data = await parseBody(response);
+  if (!response.ok) {
+    throw new AuthServiceError(
+      extractErrorMessage(response.status, data),
+      response.status,
+      data,
+    );
+  }
+
+  return data;
+}
+
+async function getJson(path: string): Promise<unknown> {
+  const response = await fetch(buildUrl(path), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+    },
+    credentials: "same-origin",
+    cache: "no-store",
   });
 
   const data = await parseBody(response);
@@ -296,65 +194,52 @@ export const authService = {
     };
   },
 
-  async login(payload: LoginPayload): Promise<AuthResult> {
+  async login(payload: LoginPayload): Promise<LoginResult> {
     const data = await postJson(LOGIN_PATH, payload);
-    const result = normalizeTokenResponse(parseResponseJson(data));
-    tokenStorage.setTokens(result.tokens);
-    return result;
-  },
-
-  async refresh(refreshToken?: string): Promise<Tokens> {
-    const stored = tokenStorage.getTokens();
-    const refreshValue = refreshToken ?? stored?.refreshToken;
-
-    if (!refreshValue) {
-      throw new AuthServiceError("Kein Refresh-Token vorhanden.");
-    }
-
-    const data = await postJson(REFRESH_PATH, {
-      refreshToken: refreshValue,
-      refresh_token: refreshValue,
-      token: refreshValue,
-    });
-
-    const result = normalizeTokenResponse(parseResponseJson(data));
-    tokenStorage.setTokens(result.tokens);
-    return result.tokens;
-  },
-
-  logout(): void {
-    tokenStorage.clearTokens();
-    if (typeof window !== "undefined") {
-      fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "same-origin",
-      }).catch(() => undefined);
-    }
-  },
-
-  getCurrentUser(): User | null {
-    const tokens = tokenStorage.getTokens();
-    if (!tokens?.accessToken) {
-      return null;
-    }
-
-    const payload = decodeJwtPayload(tokens.accessToken);
-    if (!payload) {
-      return null;
-    }
-
-    const roles =
-      Array.isArray(payload.roles) && payload.roles.length > 0
-        ? payload.roles
-        : typeof payload.role === "string"
-          ? [payload.role]
-          : undefined;
+    const session = toAuthSession(data);
 
     return {
-      id: typeof payload.sub === "string" ? payload.sub : undefined,
-      email: typeof payload.email === "string" ? payload.email : undefined,
-      role: roles?.[0] as Role | undefined,
-      roles,
+      ...session,
+      raw: data,
     };
+  },
+
+  async refresh(refreshToken?: string): Promise<void> {
+    if (refreshToken) {
+      await postJson(REFRESH_PATH, {
+        refreshToken,
+        refresh_token: refreshToken,
+        token: refreshToken,
+      });
+      return;
+    }
+
+    await postJson(REFRESH_PATH, {});
+  },
+
+  async getSession(): Promise<AuthSession> {
+    const data = await getJson(ME_PATH);
+    return toAuthSession(data);
+  },
+
+  async logout(): Promise<void> {
+    clearClientAuthState();
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+    } catch {
+      // The client state is already cleared. A failed logout request should not block UX.
+    }
+  },
+
+  getCurrentUser() {
+    return null;
   },
 };

@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { authService, AuthServiceError } from "@/lib/auth/auth.service";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { authService, AuthServiceError } from "@/lib/auth/auth.service";
+import { getDeviceContext } from "@/lib/auth/device";
+import { routing } from "@/i18n/routing";
 
 function mapLoginError(error: unknown): string {
   if (error instanceof AuthServiceError) {
@@ -15,6 +18,13 @@ function mapLoginError(error: unknown): string {
 
     if (error.status === 401) {
       return "Der Account ist noch nicht freigeschaltet oder die Zugangsdaten sind nicht korrekt.";
+    }
+
+    if (
+      error.status === 403 &&
+      (message.includes("geraet") || message.includes("device"))
+    ) {
+      return "Login nicht erlaubt oder Geraet nicht autorisiert.";
     }
 
     if (
@@ -29,6 +39,10 @@ function mapLoginError(error: unknown): string {
       return "Dein Account ist noch nicht freigeschaltet.";
     }
 
+    if (error.status === 429) {
+      return "Zu viele Login-Versuche. Bitte spaeter erneut versuchen.";
+    }
+
     if (message.includes("invalid")) {
       return "Falsche E-Mail oder falsches Passwort.";
     }
@@ -41,6 +55,7 @@ function mapLoginError(error: unknown): string {
 
 export function LoginPanel() {
   const router = useRouter();
+  const { refreshSession } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -52,9 +67,17 @@ export function LoginPanel() {
     setIsLoading(true);
 
     try {
-      await authService.login({ email, password });
+      const deviceContext = await getDeviceContext();
+
+      await authService.login({
+        email,
+        password,
+        deviceFingerprint: deviceContext.deviceFingerprint,
+        deviceName: deviceContext.deviceName,
+      });
+      await refreshSession();
       toast.success("Login erfolgreich");
-      router.replace("/app");
+      router.replace(`/${routing.defaultLocale}/dashboard`);
     } catch (submitError) {
       const message = mapLoginError(submitError);
       setError(message);

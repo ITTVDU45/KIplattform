@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { AuthProvider } from "@/components/auth/auth-provider";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "@/styles/globals.css";
@@ -36,20 +37,22 @@ export default function RootLayout({
     <html lang="de" className="dark" suppressHydrationWarning>
       <body className={`${inter.className} bg-background text-foreground`}>
         <ThemeProvider defaultTheme="dark" storageKey="curser-theme">
-          {children}
-          <Toaster
-            position="top-center"
-            toastOptions={{
-              classNames: {
-                toast:
-                  "bg-popover/95 backdrop-blur-xl border border-border text-foreground",
-                title: "text-foreground",
-                description: "text-muted-foreground",
-                success: "border-accent-success/30",
-                error: "border-destructive/30",
-              },
-            }}
-          />
+          <AuthProvider>
+            {children}
+            <Toaster
+              position="top-center"
+              toastOptions={{
+                classNames: {
+                  toast:
+                    "bg-popover/95 backdrop-blur-xl border border-border text-foreground",
+                  title: "text-foreground",
+                  description: "text-muted-foreground",
+                  success: "border-accent-success/30",
+                  error: "border-destructive/30",
+                },
+              }}
+            />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -8,8 +8,15 @@ import { toast } from "sonner";
 import { authService, AuthServiceError } from "@/lib/auth/auth.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-const SUCCESS_MESSAGE = "Registrierung eingegangen, Freischaltung folgt";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { RegisterSalutation } from "@/lib/auth/auth.types";
 
 function mapRegisterError(error: unknown): string {
   if (error instanceof AuthServiceError) {
@@ -21,9 +28,9 @@ function mapRegisterError(error: unknown): string {
 
 export function RegisterForm() {
   const router = useRouter();
+  const [salutation, setSalutation] = useState<RegisterSalutation | "">("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,17 +39,25 @@ export function RegisterForm() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+
+    if (!salutation) {
+      const message = "Bitte waehle eine Anrede aus.";
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      await authService.register({
+      const result = await authService.register({
+        salutation,
         firstName,
         lastName,
-        phone,
         email,
         password,
       });
-      toast.success(SUCCESS_MESSAGE);
+      toast.success(result.message);
       router.push("/register/success");
     } catch (submitError) {
       const message = mapRegisterError(submitError);
@@ -71,11 +86,30 @@ export function RegisterForm() {
       </p>
 
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-foreground" htmlFor="salutation">
+            Anrede
+          </Label>
+          <Select
+            value={salutation}
+            onValueChange={(value) => setSalutation(value as RegisterSalutation)}
+          >
+            <SelectTrigger id="salutation" aria-label="Anrede">
+              <SelectValue placeholder="Anrede waehlen" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Herr">Herr</SelectItem>
+              <SelectItem value="Frau">Frau</SelectItem>
+              <SelectItem value="Divers">Divers</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="firstName">
+            <Label className="text-sm font-medium text-foreground" htmlFor="firstName">
               Vorname
-            </label>
+            </Label>
             <Input
               id="firstName"
               type="text"
@@ -86,9 +120,9 @@ export function RegisterForm() {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="lastName">
+            <Label className="text-sm font-medium text-foreground" htmlFor="lastName">
               Nachname
-            </label>
+            </Label>
             <Input
               id="lastName"
               type="text"
@@ -101,23 +135,9 @@ export function RegisterForm() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground" htmlFor="phone">
-            Telefonnummer
-          </label>
-          <Input
-            id="phone"
-            type="tel"
-            autoComplete="tel"
-            required
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground" htmlFor="email">
+          <Label className="text-sm font-medium text-foreground" htmlFor="email">
             E-Mail
-          </label>
+          </Label>
           <Input
             id="email"
             type="email"
@@ -129,9 +149,9 @@ export function RegisterForm() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground" htmlFor="password">
+          <Label className="text-sm font-medium text-foreground" htmlFor="password">
             Passwort
-          </label>
+          </Label>
           <Input
             id="password"
             type="password"

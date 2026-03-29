@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
 import { navConfig } from "@/config/nav";
+import { APP_NAME } from "@/config/constants";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "@/i18n/navigation";
@@ -31,9 +32,9 @@ export function Sidebar() {
       <div className="flex h-16 items-center border-b border-border px-6">
         <Link href="/dashboard" className="flex items-center gap-3 group">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold text-lg shadow-glow transition-all duration-200 group-hover:scale-105">
-            C
+            {APP_NAME.charAt(0)}
           </div>
-          <span className="text-xl font-bold text-foreground tracking-tight">Curser</span>
+          <span className="text-xl font-bold text-foreground tracking-tight">{APP_NAME}</span>
         </Link>
       </div>
 

@@ -1,4 +1,4 @@
-export type Role = "admin" | "customer" | string;
+export type Role = "superadmin" | "admin" | "user" | string;
 
 export interface Tokens {
   accessToken: string;
@@ -18,6 +18,7 @@ export interface TokenResponse {
   expires_at?: number | string;
   expiresIn?: number | string;
   expires_in?: number | string;
+  roles?: Role[];
   user?: User;
   [key: string]: unknown;
 }
@@ -28,24 +29,23 @@ export interface User {
   role?: Role;
   roles?: Role[];
   status?: string;
+  assignedUserIds?: string[];
   [key: string]: unknown;
-}
-
-export interface AuthResult {
-  tokens: Tokens;
-  user?: User;
-  raw: TokenResponse;
 }
 
 export interface LoginPayload {
   email: string;
   password: string;
+  deviceFingerprint?: string;
+  deviceName?: string;
 }
 
+export type RegisterSalutation = "Herr" | "Frau" | "Divers";
+
 export interface RegisterPayload {
+  salutation: RegisterSalutation;
   firstName: string;
   lastName: string;
-  phone: string;
   email: string;
   password: string;
 }
@@ -56,11 +56,22 @@ export interface RegisterResult {
   raw: unknown;
 }
 
+export interface AuthSession {
+  authenticated: boolean;
+  user: User | null;
+  roles: Role[];
+}
+
+export interface LoginResult extends AuthSession {
+  raw: unknown;
+}
+
 export interface JwtPayload {
   sub?: string;
   email?: string;
   role?: string;
   roles?: string[];
   exp?: number;
+  assignedUserIds?: string[];
   [key: string]: unknown;
 }
