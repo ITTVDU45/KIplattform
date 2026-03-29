@@ -14,7 +14,7 @@ Diese API ermöglicht:
 ### Endpoint
 
 ```
-POST https://api.ci-hosting.de/public/user/registration
+POST https://api.ci-hosting.de/user/register
 ```
 
 ### Beschreibung

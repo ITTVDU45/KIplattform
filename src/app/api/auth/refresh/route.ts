@@ -94,8 +94,8 @@ export async function POST(request: Request) {
 
   if (!refreshToken) {
     return NextResponse.json(
-      { message: "Kein Refresh-Token uebergeben." },
-      { status: 400 },
+      { success: false, refreshed: false },
+      { status: 200 },
     );
   }
 

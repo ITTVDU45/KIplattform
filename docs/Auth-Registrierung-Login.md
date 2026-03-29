@@ -65,7 +65,7 @@ Diese Route:
 
 1. validiert `salutation`, `firstName`, `lastName`, `email`, `password`
 2. mappt die Daten auf das externe API-Format
-3. leitet den Request an den dokumentierten Endpoint weiter
+3. leitet den Request an den aktuell verwendeten Upstream-Endpoint weiter
 
 Mapping der Felder:
 
@@ -80,13 +80,18 @@ Mapping der Felder:
 ```
 
 ### Externer Registrierungs-Endpoint
-Die Registrierung geht an:
+Die Registrierung geht aktuell an:
 
-- `https://api.ci-hosting.de/public/user/registration`
+- `https://api.ci-hosting.de/user/register`
 
 Die URL ist in `src/lib/auth/auth.server.ts` konfiguriert ueber:
 
 - `AUTH_SERVICE_REGISTER_URL`
+
+Hinweis:
+
+- Die urspruenglich dokumentierte URL `https://api.ci-hosting.de/public/user/registration` lieferte im Live-Test `404`.
+- Deshalb verwendet die Implementierung standardmaessig den real antwortenden Endpoint `https://api.ci-hosting.de/user/register`.
 
 ### Response-Verhalten
 Die interne Route gibt die Antwort des Upstreams an das Frontend zurueck.
@@ -371,7 +376,7 @@ Verwendete Defaults:
 AUTH_SERVICE_BASE_URL=https://auth.ci-hosting.de
 AUTH_SERVICE_LOGIN_PATH=/user/login
 AUTH_SERVICE_REFRESH_PATH=/refresh
-AUTH_SERVICE_REGISTER_URL=https://api.ci-hosting.de/public/user/registration
+AUTH_SERVICE_REGISTER_URL=https://api.ci-hosting.de/user/register
 ```
 
 ## Wichtige Dateien im aktuellen Aufbau
