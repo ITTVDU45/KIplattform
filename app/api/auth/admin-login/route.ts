@@ -24,35 +24,7 @@ interface LoginBody {
   deviceName?: string;
 }
 
-const PENDING_HINTS = [
-  "pending",
-  "freischalt",
-  "freigeben",
-  "not approved",
-  "not activated",
-  "awaiting approval",
-  "account not active",
-  "inaktiv",
-  "noch nicht",
-];
-
 const REFRESH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
-
-function isPendingPayload(data: unknown): boolean {
-  if (!data || typeof data !== "object") return false;
-  const candidate = data as Record<string, unknown>;
-  const text = [
-    candidate.message,
-    candidate.error,
-    candidate.detail,
-    candidate.description,
-    candidate.code,
-  ]
-    .filter((value): value is string => typeof value === "string")
-    .join(" ")
-    .toLowerCase();
-  return PENDING_HINTS.some((hint) => text.includes(hint));
-}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -64,7 +36,7 @@ function setAuthCookies(
   refreshToken: string,
   expiresAt: number,
 ): void {
-  const secure = process.env.NODE_ENV === "production";
+  const secure = process.env.COOKIE_SECURE !== "false" && process.env.NODE_ENV === "production";
   const accessMaxAge = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
 
   response.cookies.set({
@@ -120,7 +92,6 @@ export async function POST(request: Request) {
   if (isNonEmptyString(body.deviceFingerprint)) {
     payload.deviceFingerprint = body.deviceFingerprint.trim();
   }
-
   if (isNonEmptyString(body.deviceName)) {
     payload.deviceName = body.deviceName.trim();
   }
@@ -128,10 +99,7 @@ export async function POST(request: Request) {
   try {
     const upstreamResponse = await fetch(authServiceUrl(AUTH_SERVICE_LOGIN_PATH), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(payload),
       cache: "no-store",
     });
@@ -139,16 +107,6 @@ export async function POST(request: Request) {
     const data = await parseUpstreamBody(upstreamResponse);
 
     if (!upstreamResponse.ok) {
-      if (upstreamResponse.status === 401 && isPendingPayload(data)) {
-        return NextResponse.json(
-          {
-            message:
-              "Dein Account ist noch nicht freigeschaltet. Bitte warte auf die Freischaltung im Adminpanel.",
-          },
-          { status: 403 },
-        );
-      }
-
       return NextResponse.json(data, { status: upstreamResponse.status });
     }
 
@@ -158,32 +116,36 @@ export async function POST(request: Request) {
 
     if (!tokenData || !tokens) {
       return NextResponse.json(
-        { message: "Token response is missing required fields." },
+        { message: "Token-Response enthält keine gültigen Felder." },
         { status: 502 },
       );
     }
 
     const payloadData = decodeJwtPayload(tokens.accessToken);
+    const roles = extractRoles(tokenData.user, { roles: tokenData.roles }, payloadData);
+
+    const isAdmin = roles.some(
+      (r) => r === "admin" || r === "superadmin",
+    );
+
+    if (!isAdmin) {
+      return NextResponse.json(
+        {
+          message:
+            "Kein Admin-Zugang. Dein Account hat keine Admin-Berechtigung für diesen Bereich.",
+        },
+        { status: 403 },
+      );
+    }
+
     const user = extractSessionUser({
       payload: payloadData,
       user: tokenData.user,
       roles: tokenData.roles,
     });
-    const roles = extractRoles(tokenData.user, { roles: tokenData.roles }, payloadData);
 
-    const response = NextResponse.json({
-      authenticated: true,
-      user,
-      roles,
-    });
-
-    setAuthCookies(
-      response,
-      tokens.accessToken,
-      tokens.refreshToken,
-      tokens.expiresAt,
-    );
-
+    const response = NextResponse.json({ authenticated: true, user, roles });
+    setAuthCookies(response, tokens.accessToken, tokens.refreshToken, tokens.expiresAt);
     return response;
   } catch {
     return NextResponse.json(

@@ -1,0 +1,18 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # Cookies über HTTP erlauben (lokal ohne HTTPS)
+      # Für Produktion mit HTTPS: COOKIE_SECURE=true oder Zeile entfernen
+      - COOKIE_SECURE=false
+      # Auth-Service URLs (Standardwerte aus auth.server.ts werden genutzt wenn leer)
+      # - AUTH_SERVICE_BASE_URL=https://auth.ci-hosting.de
+      # - AUTH_SERVICE_LOGIN_PATH=/user/login
+      # - AUTH_SERVICE_REGISTER_URL=https://api.ci-hosting.de/user/register
+      # - AUTH_SERVICE_REFRESH_PATH=/refresh
+    restart: unless-stopped

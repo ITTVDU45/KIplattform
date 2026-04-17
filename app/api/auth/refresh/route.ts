@@ -48,7 +48,7 @@ function setAuthCookies(
   refreshToken: string,
   expiresAt: number,
 ): void {
-  const secure = process.env.NODE_ENV === "production";
+  const secure = process.env.COOKIE_SECURE !== "false" && process.env.NODE_ENV === "production";
   const accessMaxAge = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
 
   response.cookies.set({

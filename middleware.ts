@@ -18,7 +18,7 @@ import { routing, type Locale } from "./i18n/routing";
 const intlMiddleware = createMiddleware(routing);
 
 const PUBLIC_AUTH_PREFIXES = ["/login", "/register"];
-const CANONICAL_NON_LOCALE_PREFIXES = ["/login", "/register", "/app", "/admin"];
+const CANONICAL_NON_LOCALE_PREFIXES = ["/login", "/register", "/app", "/admin", "/admin-login"];
 const GUARDED_PREFIXES = [
   "/app",
   "/admin",
@@ -102,7 +102,7 @@ function clearAuthCookies(response: NextResponse): void {
 }
 
 function setAuthCookies(response: NextResponse, tokens: Tokens): void {
-  const secure = process.env.NODE_ENV === "production";
+  const secure = process.env.COOKIE_SECURE !== "false" && process.env.NODE_ENV === "production";
   const accessMaxAge = Math.max(0, Math.floor((tokens.expiresAt - Date.now()) / 1000));
 
   response.cookies.set({
@@ -265,9 +265,12 @@ export default async function middleware(request: NextRequest) {
     return NextResponse.redirect(canonicalUrl);
   }
 
-  const authState = isPublicAuthPath(normalizedPath) || isGuardedPath(normalizedPath)
-    ? await resolveAuthState(request)
-    : null;
+  const authState =
+    isPublicAuthPath(normalizedPath) ||
+    isGuardedPath(normalizedPath) ||
+    matchesPrefix(normalizedPath, "/admin-login")
+      ? await resolveAuthState(request)
+      : null;
 
   if (isPublicAuthPath(normalizedPath)) {
     if (authState) {
@@ -299,6 +302,22 @@ export default async function middleware(request: NextRequest) {
       setAuthCookies(response, authState.refreshedTokens);
     }
     return response;
+  }
+
+  // /admin-login: redirect authenticated admins to dashboard, otherwise allow
+  if (matchesPrefix(normalizedPath, "/admin-login")) {
+    if (
+      authState &&
+      authState.roles.some((r) => r === "admin" || r === "superadmin")
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin/dashboard";
+      url.search = "";
+      const res = NextResponse.redirect(url);
+      if (authState.refreshedTokens) setAuthCookies(res, authState.refreshedTokens);
+      return res;
+    }
+    return NextResponse.next();
   }
 
   return intlMiddleware(request);
